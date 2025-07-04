@@ -1,0 +1,18 @@
+build:
+  esbuild:
+    target: node18
+    bundle: false
+    format: cjs
+    platform: node
+    external:
+      - koishi
+      - axios
+
+publish:
+  npm: true
+  github: false
+
+lint:
+  tsconfig: './tsconfig.json'
+  eslint:
+    configFile: '.eslintrc.yml'
