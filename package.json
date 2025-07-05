@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-drawluna",
   "description": "Image generation plugin using OpenAI DALL-E API",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "types": "lib/index.d.ts",
@@ -63,7 +63,7 @@
   },
   "koishi": {
     "description": {
-      "zh": "基于多平台 API 的图片生成插件，支持文生图、图生图和图像变化"
+      "zh": "基于多平台 API 的图片生成插件，支持即梦（豆包），OpenAI （GPT-IMAGE-1）的绘图 API，提供文生图、图生图和图像变体"
     },
     "service": {
       "implements": [
