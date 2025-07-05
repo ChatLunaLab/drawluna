@@ -2,13 +2,14 @@ import { ImageAdapter } from './base'
 import { Context, Session } from 'koishi'
 import {
     ImageConfig,
-    ImageGenerationOptions,
     ImageEditOptions,
-    ImageVariationOptions,
+    ImageGenerationOptions,
     ImageGenerationResponse,
+    ImageVariationOptions,
     OpenAIConfig
 } from '../types'
 import FormData from 'form-data'
+import { getImageType } from '../utils'
 
 export class OpenAIAdapter extends ImageAdapter<'openai'> {
     type = 'openai' as const
@@ -207,24 +208,30 @@ export class OpenAIAdapter extends ImageAdapter<'openai'> {
     private buildEditRequest(options: ImageEditOptions, config: OpenAIConfig) {
         const formData = new FormData()
 
-        const model = options.model || config.defaultModel || 'dall-e-2'
+        const model = options.model || config.defaultEditModel || 'dall-e-2'
         formData.append('model', model)
         formData.append('prompt', options.prompt)
 
-        if (Buffer.isBuffer(options.image)) {
-            formData.append('image', options.image, 'image.png')
-        } else if (typeof options.image === 'string') {
-            if (options.image.startsWith('http')) {
+        const images = options.image
+
+        if (typeof images === 'string') {
+            if (images.startsWith('http')) {
                 throw new Error('图片编辑不支持 URL，请上传文件')
             }
-            formData.append(
-                'image',
-                Buffer.from(options.image, 'base64'),
-                'image.png'
-            )
+            const imageBuffer = Buffer.from(images, 'base64')
+            const imageType = getImageType(imageBuffer, true)
+            if (imageType === 'gif') {
+                throw new Error('图片编辑不支持 GIF 格式，请上传其他格式')
+            }
+            formData.append('image', imageBuffer, `image.${imageType}`)
         } else if (Array.isArray(options.image)) {
             for (let i = 0; i < options.image.length; i++) {
-                formData.append('image', options.image[i], `image_${i}.png`)
+                const image = options.image[i]
+                const imageType = getImageType(image, true)
+                if (imageType === 'gif') {
+                    throw new Error('图片编辑不支持 GIF 格式，请上传其他格式')
+                }
+                formData.append('image', image, `image_${i}.${imageType}`)
             }
         } else {
             throw new Error('图片编辑不支持 URL，请上传文件')
@@ -298,5 +305,11 @@ export class OpenAIAdapter extends ImageAdapter<'openai'> {
         if (options.user) formData.append('user', options.user)
 
         return formData
+    }
+}
+
+declare module './base' {
+    interface ImageAdapterType {
+        openai: never
     }
 }

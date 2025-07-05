@@ -4,40 +4,47 @@
 
 _多平台 AI 图像生成聚合插件，支持 `OpenAI DALL-E` 等多种图像生成模型_
 
-## [![npm](https://img.shields.io/npm/v/koishi-plugin-drawluna)](https://www.npmjs.com/package/koishi-plugin-drawluna) [![npm](https://img.shields.io/npm/dm/koishi-plugin-drawluna)](https://www.npmjs.com/package/koishi-plugin-drawluna) ![node version](https://img.shields.io/badge/node-%3E=18-green) ![github top language](https://img.shields.io/github/languages/top/ChatLunaLab/drawluna?logo=github)
+## [![npm](https://img.shields.io/npm/v/koishi-plugin-drawluna)](https://www.npmjs.com/package/koishi-plugin-drawluna) [![npm](https://img.shields.io/npm/dm/koishi-plugin-drawluna)](https://www.npmjs.com/package/koishi-plugin-drawluna)
+
+![node version](https://img.shields.io/badge/node-%3E=18-green) ![github top language](https://img.shields.io/github/languages/top/ChatLunaLab/drawluna?logo=github)
 
 </div>
 
 ## 特性
 
-1. **多平台聚合支持**：支持多种主流 AI 图像生成服务
-2. **智能配置管理**：多配置自动故障转移，确保服务高可用性
-3. **模型智能匹配**：根据请求模型自动选择最优配置，支持模型回退
+1. 支持即梦（豆包），OpenAI 的绘图模型
+2. 图像编辑（图生图），变体，文生图
 
 ## 部署
 
-在 Koishi 插件市场搜索 `drawluna`，安装后启用即可。
+在 Koishi 插件市场搜索 `drawluna` ，安装后启用即可。
 
 ## 使用
 
 ### 基础命令
 
 #### 文生图
+
 ```
 drawluna <提示词> [选项]
 ```
+
 根据文字描述生成图像
 
 #### 图生图
+
 ```
 drawluna.edit <提示词> [选项]
 ```
+
 编辑或扩展现有图片（引用原图或者上传图片）
 
 #### 图像变化
+
 ```
 drawluna.variation [选项]
 ```
+
 基于现有图片生成变体（需要先上传图片）
 
 ### 命令选项
@@ -55,4 +62,5 @@ drawluna.variation [选项]
 
 感谢 [OpenAI](https://openai.com) 提供优秀的图像生成 API。
 感谢 [Koishi](https://koishi.chat) 提供强大的机器人框架。
+感谢 [即梦](https://www.volcengine.com/product/jimeng) 提供优秀的图像生成 API。
 感谢所有为开源社区做出贡献的开发者们。

@@ -1,13 +1,15 @@
 import { Context, h, Schema, Session } from 'koishi'
 import {
     ImageConfig,
-    ImageGenerationOptions,
     ImageEditOptions,
-    ImageVariationOptions,
-    ImageGenerationResponse
+    ImageGenerationOptions,
+    ImageGenerationResponse,
+    ImageVariationOptions
 } from '../types'
 
-export abstract class ImageAdapter<T extends 'openai' = 'openai'> {
+export abstract class ImageAdapter<
+    T extends keyof ImageAdapterType = keyof ImageAdapterType
+> {
     abstract type: T
     private modelCache: Map<string, { models: string[]; timestamp: number }> =
         new Map()
@@ -122,3 +124,5 @@ export abstract class ImageAdapter<T extends 'openai' = 'openai'> {
         return elements
     }
 }
+
+export interface ImageAdapterType {}

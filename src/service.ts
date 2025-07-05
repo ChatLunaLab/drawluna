@@ -1,26 +1,26 @@
-import { Context, Service, h, Session } from 'koishi'
+import { Context, h, Service, Session } from 'koishi'
 import { Config } from './config'
-import { ImageAdapter, OpenAIAdapter } from './adapters'
+import { DoubaoAdapter, ImageAdapter, OpenAIAdapter } from './adapters'
 import {
     ImageConfig,
-    ImageGenerationOptions,
     ImageEditOptions,
+    ImageGenerationOptions,
     ImageVariationOptions,
-    OpenAIConfigItem,
-    ModelFilterOptions
+    ModelFilterOptions,
+    OpenAIConfigItem
 } from './types'
 import {
-    retryWithConfigs,
     formatRetryErrors,
-    validateImageSize,
+    retryWithConfigs,
     validateImageQuality,
+    validateImageSize,
     withRetryDelay
 } from './utils'
 
 export class DrawLunaService extends Service {
-    private _adapters: Record<string, ImageAdapter> = {}
+    private _adapters: Record<string, ImageAdapter<'openai' | 'doubao'>> = {}
     public _models: Record<string, string[]> = {}
-    private _configs: ImageConfig[] = []
+    private _configs: (ImageConfig<'openai'> | ImageConfig<'doubao'>)[] = []
 
     constructor(
         ctx: Context,
@@ -33,6 +33,7 @@ export class DrawLunaService extends Service {
 
     private initializeAdapters() {
         this.addAdapter(new OpenAIAdapter(this.ctx))
+        this.addAdapter(new DoubaoAdapter(this.ctx))
     }
 
     private loadConfigs() {
@@ -40,9 +41,19 @@ export class DrawLunaService extends Service {
 
         if (this.config.openai && this.config.openaiConfigs) {
             for (let i = 0; i < this.config.openaiConfigs.length; i++) {
-                const openaiConfig = this.config.openaiConfigs[i]
-                this._configs.push(this.convertOpenAIConfig(openaiConfig, i))
+                this._configs.push(
+                    this.convertOpenAIConfig(this.config.openaiConfigs[i], i)
+                )
             }
+        }
+
+        if (this.config.doubao && this.config.doubaoConfig) {
+            this._configs.push(
+                this.convertDoubaoConfig(
+                    this.config.doubaoConfig,
+                    this._configs.length
+                )
+            )
         }
     }
 
@@ -58,6 +69,7 @@ export class DrawLunaService extends Service {
             config: {
                 apiKey: openaiConfig.apiKey,
                 defaultModel: openaiConfig.defaultModel,
+                defaultEditModel: openaiConfig.defaultEditModel,
                 defaultSize: openaiConfig.defaultSize,
                 defaultQuality: openaiConfig.defaultQuality,
                 defaultStyle: openaiConfig.defaultStyle,
@@ -68,37 +80,54 @@ export class DrawLunaService extends Service {
         }
     }
 
-    addAdapter(adapter: ImageAdapter) {
+    private convertDoubaoConfig(
+        doubaoConfig: NonNullable<Config['doubaoConfig']>,
+        index: number
+    ): ImageConfig<'doubao'> {
+        return {
+            index,
+            type: 'doubao',
+            url: doubaoConfig.url,
+            config: {
+                apiKey: '',
+                accessKey: doubaoConfig.accessKey,
+                secretKey: doubaoConfig.secretKey,
+                region: doubaoConfig.region,
+                service: doubaoConfig.service,
+                defaultModel: doubaoConfig.defaultModel,
+                defaultEditModel: doubaoConfig.defaultEditModel,
+                defaultSize: doubaoConfig.defaultSize,
+                timeout: doubaoConfig.timeout,
+                retryCount: doubaoConfig.retryCount,
+                logoInfo: doubaoConfig.logoInfo
+            }
+        }
+    }
+
+    addAdapter(adapter: ImageAdapter<'openai' | 'doubao'>) {
         this._adapters[adapter.type] = adapter
     }
 
-    getAllConfigs(): ImageConfig[] {
-        return this._configs.filter((config) => {
-            const adapter = this._adapters[config.type]
-            return adapter !== undefined
-        })
+    getAllConfigs(): (ImageConfig<'openai'> | ImageConfig<'doubao'>)[] {
+        return this._configs.filter(
+            (config) => this._adapters[config.type] !== undefined
+        )
     }
 
-    async getConfigs(options: ModelFilterOptions = {}): Promise<ImageConfig[]> {
+    async getConfigs(
+        options: ModelFilterOptions = {}
+    ): Promise<(ImageConfig<'openai'> | ImageConfig<'doubao'>)[]> {
         const allConfigs = this.getAllConfigs()
         const { model, fallbackToDefault = true } = options
 
-        if (!model) {
-            return allConfigs
-        }
+        if (!model) return allConfigs
 
-        // 首先尝试找到支持指定模型的配置
         const compatibleConfigs = []
-
         for (const config of allConfigs) {
             const adapter = this._adapters[config.type]
             if (adapter) {
                 try {
-                    const supportsModel = await adapter.supportsModel(
-                        config,
-                        model
-                    )
-                    if (supportsModel) {
+                    if (await adapter.supportsModel(config, model)) {
                         compatibleConfigs.push(config)
                     }
                 } catch (error) {
@@ -109,11 +138,8 @@ export class DrawLunaService extends Service {
             }
         }
 
-        if (compatibleConfigs.length > 0) {
-            return compatibleConfigs
-        }
+        if (compatibleConfigs.length > 0) return compatibleConfigs
 
-        // 如果没有找到支持指定模型的配置，并且启用了回退
         if (fallbackToDefault) {
             this.ctx.logger.info(
                 `未找到支持模型 ${model} 的配置，回退到默认配置`
@@ -124,16 +150,42 @@ export class DrawLunaService extends Service {
         return []
     }
 
-    async generateImage(
-        prompt: string,
-        options: Partial<ImageGenerationOptions> = {},
-        session?: Session
-    ): Promise<h[]> {
+    private validatePrompt(prompt: string) {
         if (prompt.length > this.config.maxPromptLength) {
             throw new Error(
                 `提示词过长，请控制在 ${this.config.maxPromptLength} 字符以内`
             )
         }
+    }
+
+    private async processWithModel<
+        T extends
+            | ImageGenerationOptions
+            | ImageEditOptions
+            | ImageVariationOptions
+    >(config: ImageConfig, options: Partial<T>, adapter: ImageAdapter) {
+        let finalOptions = { ...options }
+        if (options.model) {
+            const supportsModel = await adapter.supportsModel(
+                config,
+                options.model
+            )
+            if (!supportsModel) {
+                this.ctx.logger.info(
+                    `配置 ${config.index} 不支持模型 ${options.model}，使用默认模型`
+                )
+                finalOptions = { ...options, model: undefined }
+            }
+        }
+        return finalOptions
+    }
+
+    async generateImage(
+        prompt: string,
+        options: Partial<ImageGenerationOptions> = {},
+        session?: Session
+    ): Promise<h[]> {
+        this.validatePrompt(prompt)
 
         const configs = await this.getConfigs({
             model: options.model,
@@ -141,45 +193,25 @@ export class DrawLunaService extends Service {
             fallbackToDefault: true
         })
 
-        if (configs.length === 0) {
-            throw new Error('没有可用的配置')
-        }
+        if (configs.length === 0) throw new Error('没有可用的配置')
 
         const result = await retryWithConfigs(
             configs,
             async (config) =>
                 withRetryDelay(async () => {
                     const adapter = this._adapters[config.type]
-                    if (!adapter) {
+                    if (!adapter)
                         throw new Error(`适配器 '${config.type}' 不可用`)
-                    }
 
-                    // 如果指定的模型不被当前配置支持，使用配置的默认模型
-                    let finalOptions = { ...options }
-                    if (options.model) {
-                        const supportsModel = await adapter.supportsModel(
+                    const finalOptions =
+                        await this.processWithModel<ImageGenerationOptions>(
                             config,
-                            options.model
+                            options,
+                            adapter
                         )
-                        if (!supportsModel) {
-                            this.ctx.logger.info(
-                                `配置 ${config.index} 不支持模型 ${options.model}，使用默认模型`
-                            )
-                            finalOptions = {
-                                ...options,
-                                model: undefined // 让适配器使用默认模型
-                            }
-                        }
-                    }
-
-                    const generateOptions: ImageGenerationOptions = {
-                        prompt,
-                        ...finalOptions
-                    }
-
                     const response = await adapter.generateImage(
                         config,
-                        generateOptions,
+                        { prompt, ...finalOptions },
                         session
                     )
                     return adapter.createImageElements(response)
@@ -200,11 +232,7 @@ export class DrawLunaService extends Service {
         options: Partial<ImageEditOptions> = {},
         session?: Session
     ): Promise<h[]> {
-        if (prompt.length > this.config.maxPromptLength) {
-            throw new Error(
-                `提示词过长，请控制在 ${this.config.maxPromptLength} 字符以内`
-            )
-        }
+        this.validatePrompt(prompt)
 
         const configs = await this.getConfigs({
             model: options.model,
@@ -212,45 +240,23 @@ export class DrawLunaService extends Service {
             fallbackToDefault: true
         })
 
-        if (configs.length === 0) {
-            throw new Error('没有可用的配置')
-        }
+        if (configs.length === 0) throw new Error('没有可用的配置')
 
         const result = await retryWithConfigs(
             configs,
             async (config) => {
                 const adapter = this._adapters[config.type]
-                if (!adapter) {
-                    throw new Error(`适配器 '${config.type}' 不可用`)
-                }
+                if (!adapter) throw new Error(`适配器 '${config.type}' 不可用`)
 
-                // 检查模型兼容性
-                let finalOptions = { ...options }
-                if (options.model) {
-                    const supportsModel = await adapter.supportsModel(
+                const finalOptions =
+                    await this.processWithModel<ImageEditOptions>(
                         config,
-                        options.model
+                        options,
+                        adapter
                     )
-                    if (!supportsModel) {
-                        this.ctx.logger.info(
-                            `配置 ${config.index} 不支持模型 ${options.model}，使用默认模型`
-                        )
-                        finalOptions = {
-                            ...options,
-                            model: undefined
-                        }
-                    }
-                }
-
-                const editOptions: ImageEditOptions = {
-                    image: images,
-                    prompt,
-                    ...finalOptions
-                }
-
                 const response = await adapter.editImage(
                     config,
-                    editOptions,
+                    { image: images, prompt, ...finalOptions },
                     session
                 )
                 return adapter.createImageElements(response)
@@ -276,44 +282,23 @@ export class DrawLunaService extends Service {
             fallbackToDefault: true
         })
 
-        if (configs.length === 0) {
-            throw new Error('没有可用的配置')
-        }
+        if (configs.length === 0) throw new Error('没有可用的配置')
 
         const result = await retryWithConfigs(
             configs,
             async (config) => {
                 const adapter = this._adapters[config.type]
-                if (!adapter) {
-                    throw new Error(`适配器 '${config.type}' 不可用`)
-                }
+                if (!adapter) throw new Error(`适配器 '${config.type}' 不可用`)
 
-                // 检查模型兼容性
-                let finalOptions = { ...options }
-                if (options.model) {
-                    const supportsModel = await adapter.supportsModel(
+                const finalOptions =
+                    await this.processWithModel<ImageVariationOptions>(
                         config,
-                        options.model
+                        options,
+                        adapter
                     )
-                    if (!supportsModel) {
-                        this.ctx.logger.info(
-                            `配置 ${config.index} 不支持模型 ${options.model}，使用默认模型`
-                        )
-                        finalOptions = {
-                            ...options,
-                            model: undefined
-                        }
-                    }
-                }
-
-                const variationOptions: ImageVariationOptions = {
-                    image,
-                    ...finalOptions
-                }
-
                 const response = await adapter.createVariation(
                     config,
-                    variationOptions,
+                    { image, ...finalOptions },
                     session
                 )
                 return adapter.createImageElements(response)
@@ -329,10 +314,8 @@ export class DrawLunaService extends Service {
     }
 
     async getAvailableModels(): Promise<string[]> {
-        const allConfigs = this.getAllConfigs()
         const allModels = new Set<string>()
-
-        for (const config of allConfigs) {
+        for (const config of this.getAllConfigs()) {
             const adapter = this._adapters[config.type]
             if (adapter) {
                 try {
@@ -345,7 +328,6 @@ export class DrawLunaService extends Service {
                 }
             }
         }
-
         return Array.from(allModels)
     }
 
@@ -362,7 +344,10 @@ export class DrawLunaService extends Service {
     }
 
     isEnabled(): boolean {
-        return this.config.openai && this.getAllConfigs().length > 0
+        return (
+            (this.config.openai || this.config.doubao) &&
+            this.getAllConfigs().length > 0
+        )
     }
 
     getConfigCount(): number {

@@ -216,3 +216,19 @@ export async function handleImageUpload<T>(
 
     return await handler(images)
 }
+
+export function getImageType(buffer: Buffer, pure: boolean = false): string {
+    // read first 10 bytes
+    const first10Bytes = new Uint8Array(buffer).slice(0, 10)
+    const type = Buffer.from(first10Bytes).toString('base64', 0, 10)
+    if (type.startsWith('iVBORw0KGgoAAAANSUhEUg')) {
+        return pure ? 'png' : 'image/png'
+    } else if (type.startsWith('/9j/4AAQSkZJRg')) {
+        return pure ? 'jpeg' : 'image/jpeg'
+    } else if (type.startsWith('R0lGOD')) {
+        return pure ? 'gif' : 'image/gif'
+    } else if (type.startsWith('UklGRg')) {
+        return pure ? 'webp' : 'image/webp'
+    }
+    return pure ? 'jpeg' : 'image/jpeg'
+}
