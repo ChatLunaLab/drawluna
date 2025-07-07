@@ -32,8 +32,10 @@ export class DrawLunaService extends Service {
     }
 
     private initializeAdapters() {
-        this.addAdapter(new OpenAIAdapter(this.ctx))
-        this.addAdapter(new DoubaoAdapter(this.ctx))
+        this.ctx.inject(['drawluna'], (ctx) => {
+            this.addAdapter(new OpenAIAdapter(ctx))
+            this.addAdapter(new DoubaoAdapter(ctx))
+        })
     }
 
     private loadConfigs() {
@@ -105,6 +107,7 @@ export class DrawLunaService extends Service {
     }
 
     addAdapter(adapter: ImageAdapter<'openai' | 'doubao'>) {
+        this.ctx.logger.success(`register adapter %c`, adapter.type)
         this._adapters[adapter.type] = adapter
     }
 
@@ -216,7 +219,7 @@ export class DrawLunaService extends Service {
                     )
                     return adapter.createImageElements(response)
                 }, config.config.retryCount ?? 2),
-            this.ctx.logger.extend('drawluna')
+            this.ctx.logger.extend('')
         )
 
         if (!result.success || !result.result) {
@@ -261,7 +264,7 @@ export class DrawLunaService extends Service {
                 )
                 return adapter.createImageElements(response)
             },
-            this.ctx.logger.extend('drawluna')
+            this.ctx.logger.extend('')
         )
 
         if (!result.success || !result.result) {
@@ -303,7 +306,7 @@ export class DrawLunaService extends Service {
                 )
                 return adapter.createImageElements(response)
             },
-            this.ctx.logger.extend('drawluna')
+            this.ctx.logger.extend('')
         )
 
         if (!result.success || !result.result) {

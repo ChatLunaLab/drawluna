@@ -13,6 +13,11 @@ export const Config = Schema.intersect([
         showUsage: Schema.boolean()
             .default(true)
             .description('是否显示使用信息'),
+        imageAsBase64: Schema.boolean()
+            .default(false)
+            .description(
+                '是否将图片作为 Base64 返回，避免你的消息适配器无法发送来自 API 的图片'
+            ),
         openai: Schema.boolean()
             .default(false)
             .description('是否启用 OpenAI 配置'),
@@ -148,6 +153,7 @@ export interface Config {
     maxPromptLength: number
     forwardMessage: boolean
     showUsage: boolean
+    imageAsBase64: boolean
     openaiConfigs?: {
         url: string
         headers: Record<string, string>

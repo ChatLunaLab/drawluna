@@ -6,6 +6,7 @@ import {
     ImageGenerationResponse,
     ImageVariationOptions
 } from '../types'
+import { getImageType } from '../utils'
 
 export abstract class ImageAdapter<
     T extends keyof ImageAdapterType = keyof ImageAdapterType
@@ -101,13 +102,28 @@ export abstract class ImageAdapter<
 
     async createImageElements(response: ImageGenerationResponse): Promise<h[]> {
         const elements: h[] = []
-
         for (const item of response.data) {
             if (item.url) {
-                elements.push(h.image(item.url))
+                if (this.ctx.drawluna.config.imageAsBase64) {
+                    const imageContent = await this.ctx
+                        .http(item.url, {
+                            responseType: 'arraybuffer'
+                        })
+                        .then((res) => res.data)
+                    const imageBuffer = Buffer.from(imageContent)
+                    const base64 = imageBuffer.toString('base64')
+
+                    elements.push(
+                        h.image(
+                            `data:${getImageType(imageBuffer)};base64,${base64}`
+                        )
+                    )
+                } else {
+                    elements.push(h.image(item.url))
+                }
             } else if (item.b64_json) {
                 const base64 = item.b64_json.startsWith('data:image')
-                    ? item.b64_json.split(',')[1]
+                    ? item.b64_json
                     : `data:image/png;base64,${item.b64_json}`
                 elements.push(h.image(base64))
             }
