@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-drawluna",
   "description": "Image generation plugin using OpenAI DALL-E API",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "types": "lib/index.d.ts",

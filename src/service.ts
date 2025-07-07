@@ -33,8 +33,12 @@ export class DrawLunaService extends Service {
 
     private initializeAdapters() {
         this.ctx.inject(['drawluna'], (ctx) => {
-            this.addAdapter(new OpenAIAdapter(ctx))
-            this.addAdapter(new DoubaoAdapter(ctx))
+            if (ctx.config.drawluna.openai) {
+                this.addAdapter(new OpenAIAdapter(ctx))
+            }
+            if (ctx.config.drawluna.doubao) {
+                this.addAdapter(new DoubaoAdapter(ctx))
+            }
         })
     }
 
